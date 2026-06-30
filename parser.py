@@ -48,6 +48,35 @@ The JSON output must conform EXACTLY to the following schema:
 Return ONLY the raw JSON string. Do not wrap it in markdown code blocks or add any explanatory text outside the JSON block.
 """
 
+def _get_mock_extraction(raw_text: str) -> Dict[str, Any]:
+    """
+    Returns a mock extraction for demonstration and testing purposes
+    when no Gemini API key is configured.
+    """
+    text_lower = raw_text.lower()
+    data = {
+        "full_name": None,
+        "emails": [],
+        "phones": [],
+        "locations": [],
+        "skills": [],
+        "experience": [],
+        "overall_confidence": 0.9
+    }
+    
+    if "kaushikan" in text_lower:
+        data["full_name"] = "Kaushikan"
+    if "kani.dev@github.io" in text_lower:
+        data["emails"].append("kani.dev@github.io")
+    if "chennai" in text_lower:
+        data["locations"].append({"city": "Chennai", "country_code": "IN"})
+    if "python" in text_lower:
+        data["skills"].append({"name": "Python", "years_of_experience": None})
+    if "apache spark" in text_lower or "spark" in text_lower:
+        data["skills"].append({"name": "Apache Spark", "years_of_experience": None})
+        
+    return data
+
 def extract_unstructured_data(raw_text: str) -> Dict[str, Any]:
     """
     Extracts structured candidate data from unstructured raw text using Gemini.
@@ -72,6 +101,9 @@ def extract_unstructured_data(raw_text: str) -> Dict[str, Any]:
 
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not api_key:
+        if os.environ.get("GEMINI_MOCK", "false").lower() == "true":
+            logger.info("Gemini API Key missing. Running in Mock Mode as requested.")
+            return _get_mock_extraction(raw_text)
         logger.error("Gemini API Key missing (GEMINI_API_KEY or GOOGLE_API_KEY).")
         raise ValueError("Gemini API key not found in environment variables GEMINI_API_KEY or GOOGLE_API_KEY.")
 
