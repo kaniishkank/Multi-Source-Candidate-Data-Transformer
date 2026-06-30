@@ -1,0 +1,18 @@
+{
+  "fields": [
+    {
+      "path": "full_name",
+      "required": true
+    },
+    {
+      "path": "primary_email",
+      "from": "emails[0]",
+      "required": true
+    },
+    {
+      "path": "skills"
+    }
+  ],
+  "include_confidence": true,
+  "on_missing": "null"
+}

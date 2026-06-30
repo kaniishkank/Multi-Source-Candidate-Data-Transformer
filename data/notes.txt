@@ -1,0 +1,1 @@
+Met with Kaushikan today. He is a software engineer currently based in Chennai, India. He mentioned his GitHub profile email is kani.dev@github.io. He has fantastic experience building data pipelines using Apache Spark and Python.
