@@ -17,7 +17,7 @@ class TestCandidateTransformer(unittest.TestCase):
             "emails": ["john.doe@unstructured.com"],
             "phones": ["+15550000000"],
             "skills": [
-                {"name": "Python", "years_of_experience": 2}
+                {"name": "Python", "confidence": 0.8}
             ],
             "overall_confidence": 0.8
         }
@@ -25,10 +25,10 @@ class TestCandidateTransformer(unittest.TestCase):
         
         # 2. Ingest from recruiter CSV (higher priority)
         csv_row = {
-            "full_name": "Johnathan Doe",
+            "name": "Johnathan Doe",
             "email": "john.doe@primary.com",
             "phone": "+15551111111",
-            "skills": "Python:5, SQL:3"
+            "skills": "Python, SQL"
         }
         transformer.ingest_csv_row(csv_row)
         
@@ -42,11 +42,16 @@ class TestCandidateTransformer(unittest.TestCase):
         
         # Test skills merge and priority override
         python_skill = next(s for s in transformer.canonical_record["skills"] if s["name"] == "Python")
-        self.assertEqual(python_skill["years_of_experience"], 5.0)  # Overwritten from 2 to 5 by CSV
+        # Overwritten to 1.0 (since recruiter_csv confidence is 1.0)
+        self.assertEqual(python_skill["confidence"], 1.0)
+        # Both sources are tracked
+        self.assertIn("recruiter_csv", python_skill["sources"])
+        self.assertIn("unstructured_note", python_skill["sources"])
         
         # SQL skill was added since it did not exist in unstructured notes
         sql_skill = next(s for s in transformer.canonical_record["skills"] if s["name"] == "SQL")
-        self.assertEqual(sql_skill["years_of_experience"], 3.0)
+        self.assertEqual(sql_skill["confidence"], 1.0)
+        self.assertEqual(sql_skill["sources"], ["recruiter_csv"])
 
     def test_projection_omit(self):
         """
@@ -54,7 +59,7 @@ class TestCandidateTransformer(unittest.TestCase):
         """
         transformer = CandidateTransformer()
         
-        # Ingest minimal candidate data (no phones, no locations)
+        # Ingest minimal candidate data (no phones, no location city)
         unstructured_data = {
             "full_name": "Jane Smith",
             "emails": ["jane.smith@example.com"],
@@ -62,14 +67,15 @@ class TestCandidateTransformer(unittest.TestCase):
         }
         transformer.ingest_parsed_json(unstructured_data)
         
-        # Configuration mapping phones[0] and locations[0].city with "omit"
+        # Configuration mapping phones[0] and location.city with "omit"
         config = {
-            "fields": {
-                "name": {"path": "full_name", "required": True, "on_missing": "error"},
-                "primary_email": {"path": "emails[0]", "required": True, "on_missing": "error"},
-                "phone": {"path": "phones[0]", "required": False, "on_missing": "omit"},
-                "city": {"path": "locations[0].city", "required": False, "on_missing": "omit"}
-            }
+            "fields": [
+                {"path": "name", "from": "full_name", "required": True},
+                {"path": "primary_email", "from": "emails[0]", "required": True},
+                {"path": "phone", "from": "phones[0]", "on_missing": "omit"},
+                {"path": "city", "from": "location.city", "on_missing": "omit"}
+            ],
+            "on_missing": "omit"
         }
         
         output = transformer.project_output(json.dumps(config))
@@ -99,10 +105,10 @@ class TestCandidateTransformer(unittest.TestCase):
         
         # Configuration requiring emails[0] with on_missing set to "error"
         config = {
-            "fields": {
-                "name": {"path": "full_name", "required": True, "on_missing": "error"},
-                "primary_email": {"path": "emails[0]", "required": True, "on_missing": "error"}
-            }
+            "fields": [
+                {"path": "name", "from": "full_name", "required": True},
+                {"path": "primary_email", "from": "emails[0]", "required": True, "on_missing": "error"}
+            ]
         }
         
         with self.assertRaises(ValueError) as context:

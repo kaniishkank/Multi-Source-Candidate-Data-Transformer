@@ -1,2 +1,2 @@
-name,email,phone,skills
-Kaushikan,kaushikan@example.com,+1234567890,"Python, SQL"
+name,email,phone,current_company,title,skills
+Kaushikan,kaushikan@example.com,+1234567890,Google,Senior Software Engineer,"Python, SQL"

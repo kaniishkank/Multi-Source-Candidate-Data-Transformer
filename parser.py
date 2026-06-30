@@ -19,27 +19,44 @@ CRITICAL RULES:
 
 The JSON output must conform EXACTLY to the following schema:
 {
+  "candidate_id": "string or null",
   "full_name": "string or null",
   "emails": ["string"],
   "phones": ["string"],
-  "locations": [
-    {
-      "city": "string or null",
-      "country_code": "string (ISO-3166-1 alpha-2, e.g., US) or null"
-    }
-  ],
+  "location": {
+    "city": "string or null",
+    "region": "string or null",
+    "country": "string (ISO-3166 alpha-2) or null"
+  },
+  "links": {
+    "linkedin": "string or null",
+    "github": "string or null",
+    "portfolio": "string or null",
+    "other": ["string"]
+  },
+  "headline": "string or null",
+  "years_experience": "number or null",
   "skills": [
     {
       "name": "string",
-      "years_of_experience": "number or null"
+      "confidence": "number (float between 0.0 and 1.0) or null"
     }
   ],
   "experience": [
     {
       "company": "string",
-      "role": "string or null",
-      "start_date": "string (YYYY-MM) or null",
-      "end_date": "string (YYYY-MM) or null"
+      "title": "string or null",
+      "start": "string (YYYY-MM) or null",
+      "end": "string (YYYY-MM) or null",
+      "summary": "string or null"
+    }
+  ],
+  "education": [
+    {
+      "institution": "string",
+      "degree": "string or null",
+      "field": "string or null",
+      "end_year": "number or null"
     }
   ],
   "overall_confidence": 0.95
@@ -55,26 +72,46 @@ def _get_mock_extraction(raw_text: str) -> Dict[str, Any]:
     """
     text_lower = raw_text.lower()
     data = {
-        "full_name": None,
-        "emails": [],
+        "candidate_id": "cand_kani1234",
+        "full_name": "Kaushikan",
+        "emails": ["kani.dev@github.io"],
         "phones": [],
-        "locations": [],
-        "skills": [],
-        "experience": [],
+        "location": {
+            "city": "Chennai",
+            "region": "Tamil Nadu",
+            "country": "IN"
+        },
+        "links": {
+            "linkedin": None,
+            "github": "https://github.com/kaniishkank",
+            "portfolio": None,
+            "other": []
+        },
+        "headline": "Software Engineer at Kani Dev",
+        "years_experience": 3,
+        "skills": [
+            {"name": "Python", "confidence": 0.9},
+            {"name": "Apache Spark", "confidence": 0.9}
+        ],
+        "experience": [
+            {
+                "company": "Kani Dev",
+                "title": "Software Engineer",
+                "start": "2023-01",
+                "end": "Present",
+                "summary": "Building data pipelines with Python and Spark."
+            }
+        ],
+        "education": [
+            {
+                "institution": "Anna University",
+                "degree": "B.E.",
+                "field": "Computer Science",
+                "end_year": 2023
+            }
+        ],
         "overall_confidence": 0.9
     }
-    
-    if "kaushikan" in text_lower:
-        data["full_name"] = "Kaushikan"
-    if "kani.dev@github.io" in text_lower:
-        data["emails"].append("kani.dev@github.io")
-    if "chennai" in text_lower:
-        data["locations"].append({"city": "Chennai", "country_code": "IN"})
-    if "python" in text_lower:
-        data["skills"].append({"name": "Python", "years_of_experience": None})
-    if "apache spark" in text_lower or "spark" in text_lower:
-        data["skills"].append({"name": "Apache Spark", "years_of_experience": None})
-        
     return data
 
 def extract_unstructured_data(raw_text: str) -> Dict[str, Any]:
@@ -90,12 +127,17 @@ def extract_unstructured_data(raw_text: str) -> Dict[str, Any]:
     if not raw_text or not raw_text.strip():
         logger.warning("Empty raw text provided for extraction.")
         return {
+            "candidate_id": None,
             "full_name": None,
             "emails": [],
             "phones": [],
-            "locations": [],
+            "location": {"city": None, "region": None, "country": None},
+            "links": {"linkedin": None, "github": None, "portfolio": None, "other": []},
+            "headline": None,
+            "years_experience": None,
             "skills": [],
             "experience": [],
+            "education": [],
             "overall_confidence": 0.0
         }
 
