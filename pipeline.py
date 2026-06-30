@@ -40,7 +40,7 @@ class CandidateTransformer:
         self._email_metadata: Dict[str, Dict[str, Any]] = {} # email -> {"source": ..., "timestamp": ...}
         self._phone_metadata: Dict[str, Dict[str, Any]] = {} # phone -> {"source": ..., "timestamp": ...}
         self._location_metadata: Dict[str, Dict[str, Any]] = {} # city_countrycode -> {"source": ..., "timestamp": ...}
-        self._skill_metadata: Dict[str, Dict[str, Any]] = {} # skill_name_lower -> {"source": ..., "timestamp": ...}
+        self._skill_metadata: Dict[str, Dict[str, Any]] = {} # skill_name_lower -> {"sources": [...], "confidences": {...}, "timestamp": ...}
         self._experience_metadata: Dict[Tuple[str, str], Dict[str, Any]] = {} # (company_lower, role_lower) -> {"source": ..., "timestamp": ...}
         self._source_contributions: Dict[str, float] = {}   # source_name -> confidence_score
 
@@ -212,11 +212,13 @@ class CandidateTransformer:
                 break
                 
         skill_obj = {"name": name_clean, "years_of_experience": years}
+        source_conf = self._source_contributions.get(source, 1.0)
         
         if found_idx == -1:
             self.canonical_record["skills"].append(skill_obj)
             self._skill_metadata[name_lower] = {
-                "source": source,
+                "sources": [source],
+                "confidences": {source: source_conf},
                 "timestamp": timestamp
             }
             self.provenance.append({
@@ -228,16 +230,24 @@ class CandidateTransformer:
             })
         else:
             meta = self._skill_metadata.get(name_lower, {})
-            existing_source = meta.get("source")
-            if existing_source is None or self._get_precedence(source) >= self._get_precedence(existing_source):
+            if "sources" not in meta:
+                meta["sources"] = []
+            if "confidences" not in meta:
+                meta["confidences"] = {}
+                
+            if source not in meta["sources"]:
+                meta["sources"].append(source)
+            meta["confidences"][source] = source_conf
+            meta["timestamp"] = timestamp
+            
+            # Decide on precedence for updating canonical record (highest precedence source wins)
+            highest_other_precedence = max([self._get_precedence(s) for s in meta["sources"] if s != source], default=0)
+            
+            if self._get_precedence(source) >= highest_other_precedence:
                 existing_skill = self.canonical_record["skills"][found_idx]
                 if years is not None or existing_skill.get("years_of_experience") is None:
                     existing_skill["years_of_experience"] = years
                 
-                self._skill_metadata[name_lower] = {
-                    "source": source,
-                    "timestamp": timestamp
-                }
                 self.provenance.append({
                     "field": f"skills.{name_clean}",
                     "value": existing_skill,
@@ -338,6 +348,9 @@ class CandidateTransformer:
         if not parsed_data:
             return
             
+        conf = parsed_data.get("overall_confidence", 0.0)
+        self._source_contributions[source] = float(conf)
+        
         # 1. Full Name
         if parsed_data.get("full_name"):
             self._update_scalar_field("full_name", parsed_data["full_name"], source, method, timestamp)
@@ -367,9 +380,6 @@ class CandidateTransformer:
             if exp and exp.get("company"):
                 self._add_or_update_experience(exp, source, method, timestamp)
                 
-        # Update overall confidence
-        conf = parsed_data.get("overall_confidence", 0.0)
-        self._source_contributions[source] = float(conf)
         self._update_overall_confidence()
 
     def ingest_csv_row(self, row: dict):
@@ -379,6 +389,8 @@ class CandidateTransformer:
         source = "recruiter_csv"
         method = "direct_mapping"
         timestamp = datetime.now().isoformat()
+        
+        self._source_contributions[source] = 1.0
         
         # 1. Full Name
         name_keys = ["full_name", "name", "Name", "Full Name", "Candidate Name"]
@@ -489,8 +501,6 @@ class CandidateTransformer:
             }
             self._add_or_update_experience(exp, source, method, timestamp)
             
-        # Update overall confidence
-        self._source_contributions[source] = 1.0
         self._update_overall_confidence()
 
     def _get_sorted_emails(self) -> List[str]:
@@ -526,23 +536,37 @@ class CandidateTransformer:
     def _resolve_path(self, path: str) -> Tuple[Any, bool]:
         """
         Resolves a dot-notated/bracketed path string against the candidate data root.
-        Examples:
-          - 'full_name'
-          - 'emails[0]', 'emails[1]'
-          - 'locations[0].city'
-          - 'skills', 'experience'
         """
         if path == "overall_confidence":
             return self.overall_confidence, True
         if path == "provenance":
             return self.provenance, True
             
+        # Build projected skills with confidence and sources list
+        projected_skills = []
+        for skill in self.canonical_record["skills"]:
+            name_clean = skill["name"]
+            name_lower = name_clean.lower()
+            meta = self._skill_metadata.get(name_lower, {})
+            
+            sources = meta.get("sources", [])
+            sorted_sources = sorted(sources, key=lambda s: self._get_precedence(s), reverse=True)
+            
+            confidences = meta.get("confidences", {})
+            confidence = max([confidences.get(s, 1.0) for s in sorted_sources], default=1.0)
+            
+            projected_skills.append({
+                "name": name_clean,
+                "confidence": confidence,
+                "sources": sorted_sources
+            })
+            
         data_root = {
             "full_name": self.canonical_record["full_name"],
             "emails": self._get_sorted_emails(),
             "phones": self._get_sorted_phones(),
             "locations": self._get_sorted_locations(),
-            "skills": self.canonical_record["skills"],
+            "skills": projected_skills,
             "experience": self.canonical_record["experience"]
         }
         
@@ -655,4 +679,3 @@ class CandidateTransformer:
             raise ValueError("Configuration 'fields' must be a dictionary or a list.")
             
         return output
-
