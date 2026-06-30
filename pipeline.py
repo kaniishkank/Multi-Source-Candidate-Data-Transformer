@@ -20,6 +20,23 @@ def normalize_canonical(skill_name: str) -> str:
         return skill_name
     return skill_name.strip().title()
 
+def validate_type(value: Any, expected_type: str, field_name: str):
+    if value is None:
+        return
+    if expected_type == "string":
+        if not isinstance(value, str):
+            raise ValueError(f"Field '{field_name}' expected type 'string', got {type(value).__name__}")
+    elif expected_type == "string[]":
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise ValueError(f"Field '{field_name}' expected type 'string[]', got {type(value).__name__}")
+    elif expected_type == "number":
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ValueError(f"Field '{field_name}' expected type 'number', got {type(value).__name__}")
+    elif expected_type == "boolean":
+        if not isinstance(value, bool):
+            raise ValueError(f"Field '{field_name}' expected type 'boolean', got {type(value).__name__}")
+
+
 class CandidateTransformer:
     """
     Manages candidate data ingestion, deterministic deduplication and conflict resolution,
@@ -589,7 +606,14 @@ class CandidateTransformer:
                             value = [normalize_canonical(v) for v in value]
                         elif isinstance(value, str):
                             value = normalize_canonical(value)
+                
+                # Perform schema type validation
+                expected_type = field_cfg.get("type")
+                if expected_type:
+                    validate_type(value, expected_type, out_key)
+                    
                 output[out_key] = value
+
                 
         # Handle root-level 'include_confidence'
         if config.get("include_confidence", False):
